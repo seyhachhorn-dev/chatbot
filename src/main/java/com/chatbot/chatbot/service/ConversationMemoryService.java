@@ -20,47 +20,78 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 @Slf4j
 public class ConversationMemoryService {
-    private final Map<String, List<ConversationMessage>> sessionHistories =
+    /*
+     * ConcurrentHashMap keeps it safe when multiple users chat at the same time.
+     */
+    private final Map<String, List<ConversationMessage>> notebooks =
             new ConcurrentHashMap<>();
 
-    // Max messages to retain per session (prevents unbounded token growth)
+    /*
+     * How many messages to keep per user.
+     * Old messages are removed when this limit is reached.
+     * This prevents sending too much data to the AI (saves cost + speed).
+     */
     @Value("${chatbot.memory.max-history}")
     private int maxHistorySize;
 
 
-    public void addMessage(String sessionId, Role role, String content){
+    /*
+     * Write a new message into the user's notebook.
+     * Role tells us who wrote it — the user or the AI assistant.
+     */
+    public void saveMessage(String sessionId, Role role, String content){
+        List<ConversationMessage> notebook = getOrCreateIfExist(sessionId);
+        notebook.add(new ConversationMessage(role, content));
+        trimIfLong(notebook);
+        log.debug("Session [{}] → saved {} message. Total: {}", sessionId, role, notebook.size());
 
-     // computeIfAbsent: creates a new list if session doesn't exist yet
-        List<ConversationMessage> history = sessionHistories
-                .computeIfAbsent(sessionId,id-> new ArrayList<>());
-        history.add(new ConversationMessage(role, content));
-
-
-        while (history.size() > maxHistorySize){
-            history.remove(0); // remove oldest message
-            if(!history.isEmpty()){
-                history.remove(0); // remove its pair
-            }
-        }
-        log.debug("Session [{}] history size: {}", sessionId, history.size());
 
     }
+
+    /*
+    * message stored like [USER[0],ASSISTANT [0],USER[1],ASSISTANT [1]
+    * first if size > maxHistory it's delete USER[0]
+    * then if ASSISTANT [0] exist delete it's too
+    */
+
+    private void trimIfLong(List<ConversationMessage> notebook) {
+        while (notebook.size() > maxHistorySize){
+            notebook.remove(0); // remove oldest user message
+            if (!notebook.isEmpty()){
+                notebook.remove(0);
+            }
+        }
+    }
+
+    /*
+     * Get an existing notebook or create a new one if this session is new.
+     * key = sessionId
+     * value = list of messages (the "notebook")
+     */
+
+    private List<ConversationMessage> getOrCreateIfExist(String sessionId){
+        /*
+        * get exist one by sessionId if not it's replace session in id and get new empty list
+        */
+        return notebooks.computeIfAbsent(sessionId, id -> new ArrayList<>());
+    }
+
+
     /**
-     * Returns a read-only view of the session's conversation history.
+     * Read all messages from the user's notebook (read-only view).
      * Returns empty list for unknown sessions (new conversations).
      */
     public List<ConversationMessage> getHistory (String sessionId){
-        return Collections.unmodifiableList(
-                sessionHistories.getOrDefault(sessionId, new ArrayList<>())
-        );
+     List<ConversationMessage> notebook = notebooks.getOrDefault(sessionId, new ArrayList<>());
+     return Collections.unmodifiableList(notebook);
     }
+
 
     /**
      * Clears all history for a session (e.g. user clicks "New Chat").
      */
-
     public void clearHistory(String sessionId){
-        sessionHistories.remove(sessionId);
+        notebooks.remove(sessionId);
         log.info("Cleared session: {}", sessionId);
     }
 
@@ -69,7 +100,7 @@ public class ConversationMemoryService {
      * Returns current history size for a session (useful for response metadata).
      */
     public int getHistorySize(String sessionId){
-        return sessionHistories.getOrDefault(sessionId,List.of()).size();
+        return notebooks.getOrDefault(sessionId,List.of()).size();
     }
 
 }
