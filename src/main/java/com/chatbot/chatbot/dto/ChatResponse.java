@@ -1,9 +1,6 @@
 package com.chatbot.chatbot.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 /**
  * Developed by ChhornSeyha
@@ -14,6 +11,9 @@ import lombok.Setter;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class ChatResponse {
+    private String sessionId;
     private String reply;
+    private int historySize;
 }

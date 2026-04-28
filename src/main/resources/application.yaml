@@ -12,3 +12,8 @@ spring:
 
 server:
   port: 9090
+
+# Level 2: Memory configuration
+chatbot:
+  memory:
+    max-history: 20  # Max messages per session (trim oldest when exceeded)
