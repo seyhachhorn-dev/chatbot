@@ -2,6 +2,7 @@ package com.chatbot.chatbot.service;
 
 import com.chatbot.chatbot.enums.Role;
 import com.chatbot.chatbot.model.ConversationMessage;
+import com.chatbot.chatbot.utils.SessionSetupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -9,7 +10,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -35,21 +35,24 @@ public class ChatBotService {
      * 5. Return AI reply
      */
 
-    private final ChatClient chatClient;
-    private final ConversationMemoryService memory;
+    //new updated
 
-    /*
-     * This is the instruction card we always give the AI at the start.
-     * It tells the AI who it is and how it should behave.
-     * It is always sent first — before any conversation history.
+    /**
+     * Flow per message:
+     *   1. Save user message to memory
+     *   2. Load system prompt for this session's role
+     *   3. Load conversation history
+     *   4. Send [system + history] to AI
+     *   5. Save AI reply to memory
+     *   6. Return reply
      */
 
-    private static final String SYSTEM_PROMPT = """
-               You are a helpful, friendly assistant with memory of the current conversation.
-               Use context from the conversation history to give coherent, personalized responses.
-               If the user told you their name or any details earlier, remember and use them.
-               Be concise and natural in your replies.
-            """;
+
+
+    private final ChatClient chatClient;
+    private final ConversationMemoryService memory;
+    private final SessionSetupService sessionConfigService; // NEW — Level 3
+
 
 
     /*
@@ -100,7 +103,10 @@ public class ChatBotService {
     private List<Message> buildConversation(String sessionId) {
         List<Message> messages = new ArrayList<>();
         // Always start with the system instruction
-        messages.add(new SystemMessage(SYSTEM_PROMPT));
+
+        // Role-specific system prompt — fetched from session config
+        String systemPrompt = sessionConfigService.getSystemPrompt(sessionId);
+        messages.add(new SystemMessage(systemPrompt));
         // Add everything from memory (this already includes the latest user message)
 
         for (ConversationMessage pastMessage : memory.getHistory(sessionId)) {
@@ -110,7 +116,8 @@ public class ChatBotService {
                 messages.add(new AssistantMessage(pastMessage.getContent()));
             }
         }
-        log.debug("Session [{}] → sending {} messages to AI.", sessionId, messages.size());
+        log.debug("Session [{}] → {} messages to AI (role: {})",
+                sessionId, messages.size(), sessionConfigService.getRole(sessionId).getDisplayName());
         return messages;
 
     }
