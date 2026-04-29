@@ -64,10 +64,7 @@ public class SessionSetupService {
      */
 
     private String defaultPrompt() {
-        return """
-               You are a helpful, friendly assistant.
-               Be concise, clear, and natural in your responses.
-               """;
+        return BotRole.FRIENDLY_COMPANION.getPromptTemplate();
     }
 
 }

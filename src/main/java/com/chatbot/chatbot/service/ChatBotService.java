@@ -1,5 +1,6 @@
 package com.chatbot.chatbot.service;
 
+import com.chatbot.chatbot.enums.BotRole;
 import com.chatbot.chatbot.enums.Role;
 import com.chatbot.chatbot.model.ConversationMessage;
 import com.chatbot.chatbot.utils.SessionSetupService;
@@ -10,6 +11,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -72,9 +74,12 @@ public class ChatBotService {
         memory.saveMessage(sessionId, Role.USER, userMessage);
         // Step 2 — Prepare everything to send to the AI
         List<Message> fullConversation = buildConversation(sessionId);
-        // Step 3 — Ask the AI
+        // Step 3 — Get role-specific model parameters and ask the AI
+        BotRole role = sessionConfigService.getRole(sessionId);
+        OpenAiChatOptions options = buildOptionsForRole(role);
         String aiReply = chatClient.prompt()
                 .messages(fullConversation)
+                .options(options)
                 .call()
                 .content();
 
@@ -120,6 +125,40 @@ public class ChatBotService {
                 sessionId, messages.size(), sessionConfigService.getRole(sessionId).getDisplayName());
         return messages;
 
+    }
+
+    /*
+     * Returns per-role OpenAI options so each persona gets tuned parameters.
+     *
+     * CODING_ASSISTANT   → low temperature (precise, deterministic code)
+     * ENGLISH_TEACHER    → moderate temperature (natural but accurate corrections)
+     * PROFESSIONAL_ADVISOR → low temperature (structured, factual advice)
+     * FRIENDLY_COMPANION → higher temperature (creative, conversational)
+     * CUSTOM / default   → balanced defaults
+     */
+    private OpenAiChatOptions buildOptionsForRole(BotRole role) {
+        return switch (role) {
+            case CODING_ASSISTANT -> OpenAiChatOptions.builder()
+                    .temperature(0.2)
+                    .topP(0.9)
+                    .build();
+            case ENGLISH_TEACHER -> OpenAiChatOptions.builder()
+                    .temperature(0.4)
+                    .topP(0.9)
+                    .build();
+            case PROFESSIONAL_ADVISOR -> OpenAiChatOptions.builder()
+                    .temperature(0.3)
+                    .topP(0.85)
+                    .build();
+            case FRIENDLY_COMPANION -> OpenAiChatOptions.builder()
+                    .temperature(0.7)
+                    .topP(0.95)
+                    .build();
+            default -> OpenAiChatOptions.builder()
+                    .temperature(0.4)
+                    .topP(0.9)
+                    .build();
+        };
     }
 
 

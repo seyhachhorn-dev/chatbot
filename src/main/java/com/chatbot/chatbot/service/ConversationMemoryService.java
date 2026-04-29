@@ -49,16 +49,27 @@ public class ConversationMemoryService {
     }
 
     /*
-    * message stored like [USER[0],ASSISTANT [0],USER[1],ASSISTANT [1]
-    * first if size > maxHistory it's delete USER[0]
-    * then if ASSISTANT [0] exist delete it's too
+    * Sliding-window trim that preserves the first user+assistant exchange.
+    *
+    * Layout after trim:
+    *   [0] first user message    (pinned)
+    *   [1] first assistant reply  (pinned)
+    *   [2..N] most recent messages (sliding window)
     */
-
     private void trimIfLong(List<ConversationMessage> notebook) {
-        while (notebook.size() > maxHistorySize){
-            notebook.remove(0); // remove oldest user message
-            if (!notebook.isEmpty()){
+        if (notebook.size() <= maxHistorySize) {
+            return;
+        }
+        if (notebook.size() < 4) {
+            while (notebook.size() > maxHistorySize) {
                 notebook.remove(0);
+            }
+            return;
+        }
+        while (notebook.size() > maxHistorySize && notebook.size() > 3) {
+            notebook.remove(2);
+            if (notebook.size() > 2) {
+                notebook.remove(2);
             }
         }
     }
